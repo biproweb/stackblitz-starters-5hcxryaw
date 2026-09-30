@@ -1,15 +1,48 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+
+const EMAIL_KEY = 'portal_bi_email'
+
+function readSavedEmail(): string {
+  try {
+    return localStorage.getItem(EMAIL_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function saveEmail(email: string | null) {
+  try {
+    if (email) localStorage.setItem(EMAIL_KEY, email)
+    else localStorage.removeItem(EMAIL_KEY)
+  } catch {
+    // navegador bloqueou o armazenamento; segue sem lembrar
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberEmail, setRememberEmail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Quem já está conectado vai direto para os dashboards
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace('/dashboard')
+    })
+
+    const saved = readSavedEmail()
+    if (saved) {
+      setEmail(saved)
+      setRememberEmail(true)
+    }
+  }, [router])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -28,12 +61,13 @@ export default function LoginPage() {
       return
     }
 
+    saveEmail(rememberEmail ? email : null)
     router.push('/dashboard')
   }
 
   return (
     <div style={styles.page}>
-      <form onSubmit={handleLogin} style={styles.card}>
+      <form onSubmit={handleLogin} style={styles.card} method="post" action="#">
         <h1 style={styles.title}>Dashboards</h1>
         <p style={styles.subtitle}>Entre com seu e-mail e senha</p>
 
@@ -41,11 +75,13 @@ export default function LoginPage() {
           E-mail
           <input
             type="email"
+            name="email"
+            id="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
-            autoComplete="email"
-            autoFocus
+            autoComplete="username"
+            autoFocus={!email}
             style={styles.input}
           />
         </label>
@@ -54,12 +90,24 @@ export default function LoginPage() {
           Senha
           <input
             type="password"
+            name="password"
+            id="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            autoFocus={!!email}
             style={styles.input}
           />
+        </label>
+
+        <label style={styles.checkbox}>
+          <input
+            type="checkbox"
+            checked={rememberEmail}
+            onChange={e => setRememberEmail(e.target.checked)}
+          />
+          Lembrar meu e-mail
         </label>
 
         {error && <p style={styles.error}>{error}</p>}
@@ -132,6 +180,15 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 14,
     color: '#b91c1c'
+  },
+  checkbox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 14,
+    color: '#374151',
+    cursor: 'pointer',
+    userSelect: 'none'
   },
   button: {
     marginTop: 6,
