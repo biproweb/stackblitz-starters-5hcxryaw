@@ -51,7 +51,12 @@ export default function DashboardPage() {
         return
       }
 
-      const dashboardsList = allowedDashboards.map(d => d.dashboards)
+      const dashboardsList = allowedDashboards
+        .map((d: any) => d.dashboards)
+        .filter(Boolean)
+        .sort((a: any, b: any) =>
+          a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+        )
 
       setDashboards(dashboardsList)
       setSelectedDashboard(dashboardsList[0]) // seleciona o primeiro dashboard
