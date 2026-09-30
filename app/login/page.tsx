@@ -68,6 +68,11 @@ export default function LoginPage() {
   return (
     <div style={styles.page}>
       <form onSubmit={handleLogin} style={styles.card} method="post" action="#">
+        <img
+          src="/logo.png"
+          alt="DMZ Incorporadora"
+          style={{ width: 170, height: 'auto', margin: '0 auto 4px', display: 'block' }}
+        />
         <h1 style={styles.title}>Dashboards</h1>
         <p style={styles.subtitle}>Entre com seu e-mail e senha</p>
 
