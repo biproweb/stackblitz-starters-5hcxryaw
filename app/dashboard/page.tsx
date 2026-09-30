@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+
+const HEADER_HEIGHT = 48
 
 export default function DashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [dashboards, setDashboards] = useState<any[]>([])
   const [selectedDashboard, setSelectedDashboard] = useState<any | null>(null)
+  const frameAreaRef = useRef<HTMLDivElement>(null)
 
   // -----------------------------
   // 1. Validar sessão e buscar dashboards permitidos
@@ -65,9 +68,9 @@ export default function DashboardPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-  
+
     if (!user) return
-  
+
     await fetch('/api/log-access', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -77,7 +80,6 @@ export default function DashboardPage() {
       })
     })
   }
-  
 
   // -----------------------------
   // 3. Trocar dashboard selecionado
@@ -88,71 +90,149 @@ export default function DashboardPage() {
   }
 
   // -----------------------------
-  // 4. Logout corrigido
+  // 4. Logout
   // -----------------------------
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/login')  // ← CORREÇÃO AQUI
+    router.push('/login')
+  }
+
+  // -----------------------------
+  // 5. Tela cheia (somente a área do relatório)
+  // -----------------------------
+  function handleFullscreen() {
+    const el = frameAreaRef.current
+    if (!el) return
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      el.requestFullscreen?.()
+    }
   }
 
   // -----------------------------
   // Renderização
   // -----------------------------
-  if (loading) return <p>Carregando dashboards...</p>
+  if (loading) {
+    return (
+      <div style={styles.page}>
+        <p style={{ margin: 'auto', color: '#555' }}>Carregando dashboards...</p>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <h1>Dashboards Disponíveis</h1>
+    <div style={styles.page}>
+      {/* Barra superior compacta */}
+      <header style={styles.header}>
+        <span style={styles.brand}>Dashboards</span>
 
-      {/* Seleção do dashboard */}
-      {dashboards.length > 0 ? (
-        <select
-          onChange={e =>
-            handleChangeDashboard(
-              dashboards.find(d => d.id === e.target.value)
-            )
-          }
-          value={selectedDashboard?.id}
-          style={{ padding: '8px', marginBottom: '16px', width: '300px' }}
-        >
-          {dashboards.map(d => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <p>Nenhum dashboard permitido para este usuário.</p>
-      )}
+        {dashboards.length > 0 ? (
+          <select
+            onChange={e =>
+              handleChangeDashboard(
+                dashboards.find(d => d.id === e.target.value)
+              )
+            }
+            value={selectedDashboard?.id}
+            style={styles.select}
+          >
+            {dashboards.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>Nenhum dashboard permitido para este usuário.</span>
+        )}
 
-      {/* Iframe do dashboard */}
+        <div style={styles.actions}>
+          {selectedDashboard && (
+            <button
+              onClick={handleFullscreen}
+              style={styles.button}
+              title="Exibir o relatório em tela cheia (Esc para sair)"
+            >
+              ⛶ Tela cheia
+            </button>
+          )}
+          <button onClick={handleLogout} style={styles.button}>
+            Sair
+          </button>
+        </div>
+      </header>
+
+      {/* Área do relatório: ocupa todo o espaço restante */}
       {selectedDashboard && (
-        <div
-          style={{
-            marginTop: '20px',
-            border: '1px solid #ccc',
-            height: '720px',
-            background: '#fff'
-          }}
-        >
+        <div ref={frameAreaRef} style={styles.frameArea}>
           <iframe
+            key={selectedDashboard.id}
             src={selectedDashboard.url}
-            style={{ width: '100%', height: '100%', border: 'none' }}
+            title={selectedDashboard.name}
+            allowFullScreen
+            style={styles.iframe}
           />
         </div>
       )}
-
-      {/* Botão de sair */}
-      <button
-        onClick={handleLogout}
-        style={{
-          marginTop: '20px',
-          padding: '10px 20px',
-          cursor: 'pointer'
-        }}
-      >
-        Sair
-      </button>
     </div>
   )
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    height: '100dvh',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    background: '#202020'
+  },
+  header: {
+    height: HEADER_HEIGHT,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '0 12px',
+    background: '#1f2937',
+    color: '#fff'
+  },
+  brand: {
+    fontWeight: 600,
+    whiteSpace: 'nowrap'
+  },
+  select: {
+    padding: '6px 8px',
+    minWidth: 260,
+    maxWidth: '50vw',
+    borderRadius: 4,
+    border: 'none',
+    color: '#111',
+    background: '#fff'
+  },
+  actions: {
+    marginLeft: 'auto',
+    display: 'flex',
+    gap: 8
+  },
+  button: {
+    padding: '6px 14px',
+    borderRadius: 4,
+    border: '1px solid rgba(255,255,255,0.35)',
+    background: 'transparent',
+    color: '#fff',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap'
+  },
+  frameArea: {
+    flex: 1,
+    minHeight: 0,
+    background: '#202020'
+  },
+  iframe: {
+    width: '100%',
+    height: '100%',
+    border: 'none',
+    display: 'block'
+  }
 }
