@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Dashboards Grupo DMZ',
     description: 'Portal de dashboards Power BI Grupo DMZ',
-    url: 'https://portal-dmz.vercel.app',
     siteName: 'Dashboards Grupo DMZ',
     locale: 'pt_BR',
     type: 'website',
