@@ -153,6 +153,13 @@ export default function DashboardPage() {
         )}
 
         <div style={styles.actions}>
+          <button
+            onClick={() => router.push('/projetos')}
+            style={styles.button}
+            title="Projetos de BI em andamento, fila e solicitações"
+          >
+            Projetos BI
+          </button>
           {selectedDashboard && (
             <button
               onClick={handleFullscreen}
