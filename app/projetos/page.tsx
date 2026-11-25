@@ -25,6 +25,8 @@ type Projeto = {
   previsao: string | null
   conclusao: string | null
   descricao: string | null
+  observacoes?: string | null
+  solicitado_em?: string | null
   ordem: number | null
   etapas: Etapa[]
   atualizado_em: string
@@ -106,6 +108,7 @@ export default function ProjetosPage() {
   const [editando, setEditando] = useState<Projeto | 'novo' | null>(null)
   const [solicitando, setSolicitando] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [detalhe, setDetalhe] = useState<Projeto | null>(null)
   const [confirmar, setConfirmar] = useState<string | null>(null)
 
   const avisar = useCallback((msg: string) => {
@@ -239,6 +242,7 @@ export default function ProjetosPage() {
       prioridade: sol.prioridade,
       previsao: sol.prazo,
       descricao: sol.descricao || '',
+      solicitado_em: sol.criado_em ? isoDate(new Date(sol.criado_em)) : null,
       etapas: [],
       ordem: proximaOrdem()
     })
@@ -344,7 +348,13 @@ export default function ProjetosPage() {
             {andamento.length ? (
               <div className={s.cards}>
                 {andamento.map(p => (
-                  <CartaoProjeto key={p.id} p={p} isAdmin={isAdmin} onEdit={() => setEditando(p)} />
+                  <CartaoProjeto
+                    key={p.id}
+                    p={p}
+                    isAdmin={isAdmin}
+                    onEdit={() => setEditando(p)}
+                    onDetail={() => setDetalhe(p)}
+                  />
                 ))}
               </div>
             ) : (
@@ -382,7 +392,7 @@ export default function ProjetosPage() {
             {fila.length ? (
               <div className={s.list}>
                 {fila.map((p, i) => (
-                  <div key={p.id} className={s.row}>
+                  <div key={p.id} className={`${s.row} ${s.rowClick}`} onClick={() => setDetalhe(p)}>
                     <span className={s.pos}>{String(i + 1).padStart(2, '0')}</span>
                     <div>
                       <div className={s.rowTitle}>{p.nome}</div>
@@ -391,9 +401,13 @@ export default function ProjetosPage() {
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
+                      {p.descricao && <div className={s.resumo}>{p.descricao}</div>}
                     </div>
-                    <div className={s.ctl}>
+                    <div className={s.ctl} onClick={e => e.stopPropagation()}>
                       <span className={`${s.pill} ${s['p_' + p.prioridade]}`}>{PRIO[p.prioridade]}</span>
+                      <button className={`${s.btn} ${s.ghost}`} onClick={() => setDetalhe(p)}>
+                        Detalhes
+                      </button>
                       {isAdmin && (
                         <>
                           <button
@@ -490,17 +504,21 @@ export default function ProjetosPage() {
             {concluidos.length ? (
               <div className={s.list}>
                 {concluidos.map(p => (
-                  <div key={p.id} className={s.row}>
+                  <div key={p.id} className={`${s.row} ${s.rowClick}`} onClick={() => setDetalhe(p)}>
                     <span className={s.pos}>✓</span>
                     <div>
                       <div className={s.rowTitle}>{p.nome}</div>
                       <div className={s.sub}>
-                        {p.setor}
+                        {[p.setor, p.solicitante].filter(Boolean).join(' · ')}
                         {p.inicio ? ' · ' + fmtLong(p.inicio) : ''}
                         {p.conclusao ? ' → ' + fmtLong(p.conclusao) : ''}
                       </div>
+                      {p.descricao && <div className={s.resumo}>{p.descricao}</div>}
                     </div>
-                    <div className={s.ctl}>
+                    <div className={s.ctl} onClick={e => e.stopPropagation()}>
+                      <button className={`${s.btn} ${s.ghost}`} onClick={() => setDetalhe(p)}>
+                        Detalhes
+                      </button>
                       {isAdmin && (
                         <button className={`${s.btn} ${s.ghost}`} onClick={() => setEditando(p)}>
                           Editar
@@ -515,6 +533,19 @@ export default function ProjetosPage() {
             )}
           </section>
         </main>
+      )}
+
+      {detalhe && (
+        <DetalheProjeto
+          p={detalhe}
+          posicaoFila={detalhe.status === 'fila' ? fila.findIndex(x => x.id === detalhe.id) + 1 : 0}
+          isAdmin={isAdmin}
+          onClose={() => setDetalhe(null)}
+          onEdit={() => {
+            setEditando(detalhe)
+            setDetalhe(null)
+          }}
+        />
       )}
 
       {editando && (
@@ -549,7 +580,41 @@ export default function ProjetosPage() {
 }
 
 // =====================================================================
-function CartaoProjeto({ p, isAdmin, onEdit }: { p: Projeto; isAdmin: boolean; onEdit: () => void }) {
+function ListaEtapas({ etapas }: { etapas: Etapa[] }) {
+  return (
+    <ol className={s.steps}>
+      {etapas.map((e, i) => (
+        <li key={i} className={s['st_' + e.status]}>
+          <span className={s.dot}>{e.status === 'feito' ? '✓' : ''}</span>
+          <span className={s.stepName}>{e.nome}</span>
+          <span className={s.stepDate}>
+            {e.status === 'feito' && e.fim
+              ? 'entregue ' + fmtShort(e.fim)
+              : e.status === 'andamento'
+              ? e.inicio
+                ? 'desde ' + fmtShort(e.inicio)
+                : 'em curso'
+              : e.fim
+              ? 'prev. ' + fmtShort(e.fim)
+              : ''}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function CartaoProjeto({
+  p,
+  isAdmin,
+  onEdit,
+  onDetail
+}: {
+  p: Projeto
+  isAdmin: boolean
+  onEdit: () => void
+  onDetail: () => void
+}) {
   const v = percentual(p)
   return (
     <article className={s.card}>
@@ -563,46 +628,157 @@ function CartaoProjeto({ p, isAdmin, onEdit }: { p: Projeto; isAdmin: boolean; o
           <span className={`${s.pill} ${s['p_' + p.prioridade]}`}>{PRIO[p.prioridade]}</span>
         </div>
       </div>
-      {p.descricao && <p className={s.desc}>{p.descricao}</p>}
+      {p.solicitante && <div className={s.sub}>Solicitante: {p.solicitante}</div>}
+      {p.descricao && <p className={`${s.desc} ${s.clamp}`}>{p.descricao}</p>}
+      {p.observacoes && (
+        <div className={s.obs}>
+          <span className={s.eyebrow}>Situação atual</span>
+          <p>{p.observacoes}</p>
+        </div>
+      )}
       <div className={s.progress}>
         <div className={s.bar}>
           <i style={{ width: v + '%' }} />
         </div>
         <b>{v}%</b>
       </div>
-      {p.etapas.length > 0 && (
-        <ol className={s.steps}>
-          {p.etapas.map((e, i) => (
-            <li key={i} className={s['st_' + e.status]}>
-              <span className={s.dot}>{e.status === 'feito' ? '✓' : ''}</span>
-              <span className={s.stepName}>{e.nome}</span>
-              <span className={s.stepDate}>
-                {e.status === 'feito' && e.fim
-                  ? 'entregue ' + fmtShort(e.fim)
-                  : e.status === 'andamento'
-                  ? e.inicio
-                    ? 'desde ' + fmtShort(e.inicio)
-                    : 'em curso'
-                  : e.fim
-                  ? 'prev. ' + fmtShort(e.fim)
-                  : ''}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+      {p.etapas.length > 0 && <ListaEtapas etapas={p.etapas} />}
       <div className={s.cardFoot}>
         <span className={s.metaLine}>
           {p.inicio ? 'Início ' + fmtLong(p.inicio) : ''}
           {p.previsao ? ' · Previsão ' + fmtLong(p.previsao) : ' · Sem previsão de término'}
         </span>
-        {isAdmin && (
-          <button className={`${s.btn} ${s.ghost}`} onClick={onEdit}>
-            Editar
+        <span className={s.actions}>
+          <button className={`${s.btn} ${s.ghost}`} onClick={onDetail}>
+            Detalhes
           </button>
-        )}
+          {isAdmin && (
+            <button className={`${s.btn} ${s.ghost}`} onClick={onEdit}>
+              Editar
+            </button>
+          )}
+        </span>
       </div>
     </article>
+  )
+}
+
+// =====================================================================
+function DetalheProjeto({
+  p,
+  posicaoFila,
+  isAdmin,
+  onClose,
+  onEdit
+}: {
+  p: Projeto
+  posicaoFila: number
+  isAdmin: boolean
+  onClose: () => void
+  onEdit: () => void
+}) {
+  const v = percentual(p)
+  const feitas = p.etapas.filter(e => e.status === 'feito').length
+
+  useEffect(() => {
+    const esc = (ev: KeyboardEvent) => ev.key === 'Escape' && onClose()
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onClose])
+
+  const info: [string, string][] = [
+    ['Setor', p.setor || '—'],
+    ['Solicitante', p.solicitante || '—'],
+    ['Solicitado em', fmtLong(p.solicitado_em) || '—'],
+    ['Início', fmtLong(p.inicio) || (p.status === 'fila' ? 'A programar' : '—')],
+    [p.status === 'concluido' ? 'Concluído em' : 'Previsão de entrega',
+      p.status === 'concluido' ? fmtLong(p.conclusao) || '—' : fmtLong(p.previsao) || 'Sem previsão'],
+    ['Última atualização',
+      p.atualizado_em
+        ? new Date(p.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+        : '—']
+  ]
+
+  return (
+    <div className={s.modal} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={s.dialog} role="dialog" aria-modal="true" aria-labelledby="detTitulo">
+        <div className={s.cardTop}>
+          <div style={{ minWidth: 0 }}>
+            <div className={s.eyebrow}>{p.setor}</div>
+            <h3 id="detTitulo" className={s.dialogTitle}>
+              {p.nome}
+            </h3>
+          </div>
+          <div className={s.tags}>
+            <span className={`${s.pill} ${s['s_' + p.status]}`}>
+              {STATUS[p.status]}
+              {posicaoFila > 0 ? ` · ${posicaoFila}º` : ''}
+            </span>
+            <span className={`${s.pill} ${s['p_' + p.prioridade]}`}>Prioridade {PRIO[p.prioridade]}</span>
+          </div>
+        </div>
+
+        <dl className={s.infoGrid}>
+          {info.map(([k, val]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{val}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div>
+          <div className={s.eyebrow}>O que foi solicitado</div>
+          {p.descricao ? (
+            <p className={s.desc}>{p.descricao}</p>
+          ) : (
+            <p className={s.note}>Sem descrição registrada.</p>
+          )}
+        </div>
+
+        {p.observacoes && (
+          <div className={s.obs}>
+            <span className={s.eyebrow}>Situação atual</span>
+            <p>{p.observacoes}</p>
+          </div>
+        )}
+
+        {p.etapas.length > 0 ? (
+          <div>
+            <div className={s.secHead} style={{ marginBottom: 6 }}>
+              <span className={s.eyebrow}>
+                Etapas · {feitas} de {p.etapas.length} concluídas
+              </span>
+            </div>
+            <div className={s.progress} style={{ marginBottom: 8 }}>
+              <div className={s.bar}>
+                <i style={{ width: v + '%' }} />
+              </div>
+              <b>{v}%</b>
+            </div>
+            <ListaEtapas etapas={p.etapas} />
+          </div>
+        ) : (
+          p.status !== 'concluido' && (
+            <p className={s.note}>As etapas serão definidas quando o projeto for iniciado.</p>
+          )
+        )}
+
+        <div className={s.dlgFoot}>
+          <span />
+          <span className={s.actions}>
+            {isAdmin && (
+              <button type="button" className={s.btn} onClick={onEdit}>
+                Editar
+              </button>
+            )}
+            <button type="button" className={`${s.btn} ${s.primary}`} onClick={onClose}>
+              Fechar
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -656,7 +832,11 @@ function Cronograma({ lista }: { lista: Projeto[] }) {
         {lista.map(p => {
           const ini = parseDate(p.inicio) || t
           const aberto = !p.previsao
-          const fim = parseDate(p.previsao) || new Date(Math.max(t.getTime(), ini.getTime()) + 21 * DAY)
+          const prev = parseDate(p.previsao)
+          // previsão vencida ou muito próxima: mantém a barra legível (mínimo de 2 semanas)
+          const fim = new Date(
+            Math.max(prev ? prev.getTime() : Math.max(t.getTime(), ini.getTime()) + 21 * DAY, ini.getTime() + 14 * DAY)
+          )
           const l = pos(ini)
           const w = Math.max(1.5, pos(fim) - l)
           return (
@@ -706,7 +886,9 @@ function EditorProjeto({
     inicio: projeto?.inicio ?? '',
     previsao: projeto?.previsao ?? '',
     conclusao: projeto?.conclusao ?? '',
-    descricao: projeto?.descricao ?? ''
+    descricao: projeto?.descricao ?? '',
+    observacoes: projeto?.observacoes ?? '',
+    solicitado_em: projeto?.solicitado_em ?? ''
   })
   const [etapas, setEtapas] = useState<Etapa[]>(projeto?.etapas ? projeto.etapas.map(e => ({ ...e })) : [])
   const [salvando, setSalvando] = useState(false)
@@ -735,6 +917,8 @@ function EditorProjeto({
       previsao: f.previsao || null,
       conclusao: f.conclusao || (f.status === 'concluido' ? isoDate(today()) : null),
       descricao: f.descricao.trim(),
+      observacoes: f.observacoes.trim(),
+      solicitado_em: f.solicitado_em || null,
       etapas: etapas.filter(e => e.nome.trim()).map(e => ({ ...e, nome: e.nome.trim() })),
       ordem: projeto?.ordem ?? (f.status === 'fila' ? proximaOrdem : null),
       atualizado_em: new Date().toISOString()
@@ -829,6 +1013,24 @@ function EditorProjeto({
           <label className={`${s.field} ${s.full}`}>
             Descrição
             <textarea id="pDesc" value={f.descricao} onChange={e => set('descricao', e.target.value)} />
+          </label>
+          <label className={`${s.field} ${s.full}`}>
+            Situação atual (visível para todos)
+            <textarea
+              id="pObs"
+              placeholder="Ex.: aguardando liberação de acesso pelo TI; validando números com o setor."
+              value={f.observacoes}
+              onChange={e => set('observacoes', e.target.value)}
+            />
+          </label>
+          <label className={s.field}>
+            Solicitado em
+            <input
+              id="pSolEm"
+              type="date"
+              value={f.solicitado_em}
+              onChange={e => set('solicitado_em', e.target.value)}
+            />
           </label>
         </div>
 
